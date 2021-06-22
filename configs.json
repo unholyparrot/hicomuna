@@ -1,0 +1,26 @@
+{
+  "Table": {
+    "Headings": ["Date","Vtop","Vtail","Enoxa","RecEnoxa","Infusion","RecInfusion","Event","Comment"]
+  },
+  "Plot": {
+    "AxisItems": {
+      "bottomAxis": "Date",
+      "leftAxis": ["Vtop", "Vtail"],
+      "rightAxis": ["Enoxa", "RecEnoxa", "Infusion","RecInfusion"]
+    },
+    "ToUpdate": ["Vtop","Vtail","Enoxa","RecEnoxa","Infusion","RecInfusion"]
+  },
+  "PlotWidget": {
+    "Axis": {
+      "bottom": {"label": "Datetime", "color": "#04081f"},
+      "left": {"label": "Velocity", "color": "#ff00e1"},
+      "right": {"label": "AC", "color": "#6b9429"}
+    }
+  },
+  "InputDialog": {
+    "Events": {
+      "Enum": ["Нет событий","Трахеостома", "Тромб", "Прочее"],
+      "Default": 0
+    }
+  }
+}
