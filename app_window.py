@@ -16,6 +16,10 @@ def timestamps_from_dates(array):
     return to_ret
 
 
+def date_from_timestamp(value):
+    return datetime.datetime.fromtimestamp(value).strftime("%d/%m/%Y %H:%M")
+
+
 def sort_dates(array):
     sub_arr = timestamps_from_dates(array)
     return np.argsort(sub_arr)
@@ -35,6 +39,7 @@ class MainWindow(QtW.QWidget):
         self.line_plots = dict()
         self.button_add_row = None
         self.button_delete_row = None
+        self.chosen_points = list()
         self.init_ui()
 
     def init_ui(self):
@@ -55,6 +60,7 @@ class MainWindow(QtW.QWidget):
         self.button_delete_row.setEnabled(False)
 
         self.table = pg.TableWidget(editable=True, sortable=False)
+        self.table.itemSelectionChanged.connect(self.table_clicked)
 
         self.plot = drawer_and_up.pyqtdrawer.Plotter(self.config_dict["PlotWidget"])
         self.draw_plot()
@@ -155,7 +161,7 @@ class MainWindow(QtW.QWidget):
             self.update_table()
 
     def set_default_view(self):
-        self.plot.p1.setYRange(0, 90)
+        self.plot.p1.setYRange(-1, 90)
         self.plot.p2.setYRange(0, 30000)
 
     def update_table(self):
@@ -164,7 +170,8 @@ class MainWindow(QtW.QWidget):
 
     def table_changed(self, row, column):
         item = self.table.item(row, column)
-        self.data_keeper[row][column] = item.text()
+        temp_var = re.sub(",", ".", item.text())
+        self.data_keeper[row][column] = temp_var
         with open(self.filename, "w", encoding="utf-8") as fw:
             fw.write(";".join(self.config_dict["Table"]["Headings"]) + '\n')
             for elem in self.data_keeper:
@@ -181,7 +188,7 @@ class MainWindow(QtW.QWidget):
 
         mask = np.where((self.data_keeper["TYPE"] == "Event") & (self.data_keeper["VALUE"] != ""))
         x_ = timestamps_from_dates(self.data_keeper[self.config_dict["Plot"]["AxisItems"]["bottomAxis"]][mask])
-        y_ = np.array([0 for _ in range(len(x_))])
+        y_ = np.array([-1 for _ in range(len(x_))])
         self.scatter_plots["Event"].setData(x=x_, y=y_,
                                             **self.config_dict["Plot"]["PointsStyle"]["Event"])
 
@@ -195,10 +202,49 @@ class MainWindow(QtW.QWidget):
             y_ = [2000, 3000]
             self.scatter_plots[heading] = pg.PlotDataItem(x=x_, y=y_)
             self.plot.p2.addItem(self.scatter_plots[heading])
-        y_ = [0, 0]
+        y_ = [-1, -1]
         self.scatter_plots["Event"] = pg.PlotDataItem(x=x_, y=y_,
                                                       **self.config_dict["Plot"]["PointsStyle"]["Event"])
         self.plot.p1.addItem(self.scatter_plots["Event"])
+        for heading in self.scatter_plots:
+            self.scatter_plots[heading].sigPointsClicked.connect(self.points_clicked)
+
+    def points_clicked(self, scatter, pts):
+        _ = scatter
+        for point in self.chosen_points:
+            point.resetPen()
+        for elem in pts:
+            self.chosen_points.append(elem)
+            elem.setPen("#000000")
+            date = date_from_timestamp(elem.pos()[0])
+            value = elem.pos()[1]
+            top_res = 0
+            for s_d in np.where(self.data_keeper["DATE"] == date)[0]:
+                try:
+                    table_var = self.data_keeper[s_d]["VALUE"].astype(float) * \
+                                self.config_dict["Plot"]["Coefficients"][self.data_keeper[s_d]["TYPE"]]
+                    if table_var == value:
+                        top_res = s_d
+                except ValueError:
+                    if value == -1:
+                        top_res = s_d
+            self.table.selectRow(top_res)
+
+    def table_clicked(self):
+        for point in self.chosen_points:
+            point.resetPen()
+        rows_pull = set()
+        for elem in self.table.selectedItems():
+            rows_pull.add(elem.row())
+        for row in rows_pull:
+            sub_section = self.data_keeper[row]
+            date = sub_section["DATE"]
+            heading = sub_section["TYPE"]
+            points = self.scatter_plots[heading].scatter.points()
+            for point in points:
+                if date == date_from_timestamp(point.pos()[0]):
+                    self.chosen_points.append(point)
+                    point.setPen("#000000")
 
 
 if __name__ == '__main__':

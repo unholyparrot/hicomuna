@@ -64,9 +64,17 @@
     }
   },
   "InputDialog": {
+    "Types": {
+      "Enum": ["Vtop", "Vtail", "Enoxa", "RecEnoxa", "Infusion", "RecInfusion", "Event"],
+      "Default": 0
+    },
     "Events": {
       "Enum": ["","Нет событий","Трахеостома", "Тромб", "Прочее"],
       "Default": 0
+    },
+    "Multiplies": {
+      "Enum": ["1", "2", "3", "4"],
+      "Default": 1
     }
   }
 }

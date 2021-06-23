@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timedelta
 import PyQt5.QtWidgets as QtW
 import PyQt5.QtCore as QtC
 import numpy as np
@@ -25,6 +26,7 @@ class EventChoice(QtW.QComboBox):
         super(EventChoice, self).__init__(parent)
         self.q_dict = q_dict
         self.addItems(self.q_dict["Enum"])
+        self.setCurrentIndex(self.q_dict["Default"])
 
 
 def check_abstract_velocity(value):
@@ -46,7 +48,8 @@ def check_abstract_enoxa(value):
         var_name = True
     else:
         try:
-            temp_var = float(value) * 30000
+            temp_var = re.sub(",", ".", value)
+            temp_var = float(temp_var) * 10000
             if (temp_var < 0) or (temp_var > 30000):
                 var_name = False
             else:
@@ -78,36 +81,57 @@ class InputDialog(QtW.QDialog):
         self.time_edit = QtW.QTimeEdit()
         self.time_edit.setTime(QtC.QTime.currentTime())
 
-        self.v_top_edit = QtW.QLineEdit()
-        self.v_tail_edit = QtW.QLineEdit()
+        self.type_edit = EventChoice(self.q_dict["Types"])
+        self.type_edit.currentIndexChanged.connect(self.type_changed)
 
-        self.enoxa_edit = QtW.QLineEdit()
-        self.rec_enoxa_edit = QtW.QLineEdit()
+        self.types_keeper = {
+            "Vtop": {
+                "label": QtW.QLabel("Vtop"),
+                "edit": QtW.QLineEdit()
+            },
+            "Vtail": {
+                "label": QtW.QLabel("Vtail"),
+                "edit": QtW.QLineEdit()
+            },
+            "Enoxa": {
+                "label": QtW.QLabel("Enoxa"),
+                "edit": QtW.QLineEdit(),
+                "multiplier": EventChoice(self.q_dict["Multiplies"])
+            },
+            "RecEnoxa": {
+                "label": QtW.QLabel("RecEnoxa"),
+                "edit": QtW.QLineEdit(),
+                "multiplier": EventChoice(self.q_dict["Multiplies"])
+            },
+            "Infusion": {
+                "label": QtW.QLabel("Infusion"),
+                "edit": QtW.QLineEdit(),
+                "multiplier": EventChoice(self.q_dict["Multiplies"])
+            },
+            "RecInfusion": {
+                "label": QtW.QLabel("RecInfusion"),
+                "edit": QtW.QLineEdit(),
+                "multiplier": EventChoice(self.q_dict["Multiplies"])
+            },
+            "Event": {
+                "label": QtW.QLabel("Event"),
+                "edit": EventChoice(self.q_dict["Events"])
+            }
+        }
 
-        self.infusion_edit = QtW.QLineEdit()
-        self.rec_infusion_edit = QtW.QLineEdit()
-
-        self.event_edit = EventChoice(self.q_dict["Events"])
         self.comment_edit = QtW.QTextEdit()
 
         self.init_ui()
-        # set initials values to widgets
+
+        self.change_visibility()
 
     def init_ui(self):
         date_label = QtW.QLabel("Date")
 
         time_label = QtW.QLabel("Time")
 
-        v_top_label = QtW.QLabel("V top, mkm/s")
-        v_tail_label = QtW.QLabel("V tail, mkm/s")
+        type_label = QtW.QLabel("Event type")
 
-        enoxa_label = QtW.QLabel("Enoxa, ml")
-        rec_enoxa_label = QtW.QLabel("Recommended Enoxa, ml")
-
-        infusion_label = QtW.QLabel("Infusion, ME/h")
-        rec_infusion_label = QtW.QLabel("Recommended Infusion, ME/h")
-
-        event_label = QtW.QLabel("Event")
         comment_label = QtW.QLabel("Comment / Event description")
 
         reject_button = QtW.QPushButton("Cancel")
@@ -122,28 +146,18 @@ class InputDialog(QtW.QDialog):
         grid.addWidget(time_label, 1, 2)
         grid.addWidget(self.time_edit, 1, 3)
 
-        grid.addWidget(v_top_label, 2, 0)
-        grid.addWidget(self.v_top_edit, 2, 1)
-        grid.addWidget(v_tail_label, 2, 2)
-        grid.addWidget(self.v_tail_edit, 2, 3)
+        grid.addWidget(type_label, 2, 0)
+        grid.addWidget(self.type_edit, 2, 1)
 
-        grid.addWidget(enoxa_label, 3, 0)
-        grid.addWidget(self.enoxa_edit, 3, 1)
-        grid.addWidget(rec_enoxa_label, 3, 2)
-        grid.addWidget(self.rec_enoxa_edit, 3, 3)
+        for elem in self.types_keeper:
+            for i, sub_elem in enumerate(self.types_keeper[elem]):
+                grid.addWidget(self.types_keeper[elem][sub_elem], 3, i)
 
-        grid.addWidget(infusion_label, 4, 0)
-        grid.addWidget(self.infusion_edit, 4, 1)
-        grid.addWidget(rec_infusion_label, 4, 2)
-        grid.addWidget(self.rec_infusion_edit, 4, 3)
+        grid.addWidget(comment_label, 7, 0)
+        grid.addWidget(self.comment_edit, 7, 1, 2, 4)
 
-        grid.addWidget(event_label, 5, 0)
-        grid.addWidget(self.event_edit, 5, 1, 1, 4)
-        grid.addWidget(comment_label, 6, 0)
-        grid.addWidget(self.comment_edit, 6, 1, 2, 4)
-
-        grid.addWidget(reject_button, 8, 5)
-        grid.addWidget(accept_button, 8, 6)
+        grid.addWidget(reject_button, 9, 5)
+        grid.addWidget(accept_button, 9, 6)
 
         self.setLayout(grid)
 
@@ -151,44 +165,77 @@ class InputDialog(QtW.QDialog):
         self.setWindowTitle('New point input')
         self.show()
 
+    def change_visibility(self, chosen="Vtop"):
+        for elem in self.types_keeper:
+            if elem == chosen:
+                for sub_elem in self.types_keeper[elem]:
+                    # self.types_keeper[elem][sub_elem].setEnabled(True)
+                    self.types_keeper[elem][sub_elem].setVisible(True)
+            else:
+                for sub_elem in self.types_keeper[elem]:
+                    # self.types_keeper[elem][sub_elem].setEnabled(False)
+                    self.types_keeper[elem][sub_elem].setVisible(False)
+
+    def type_changed(self, index):
+        key = self.q_dict["Types"]["Enum"][index]
+        self.change_visibility(key)
+
     def get_results(self):
         result = self.exec_()
         if result == self.Accepted:
             values = self.check_values()
             return values
-            # get all values
-            # val = self.some_widget.some_function()
-            # val2 = self.some_widget2.some_another_function()
-            # return val, val2, ...
         else:
             self.close()
 
     def check_values(self):
+        current_type_value = self.type_edit.currentText()
+
         sub_res = list()
         sub_errors = list()
         date = self.check_date()
         time = self.check_time()
-        v_top = self.check_top_velocity()
-        v_tail = self.check_tail_velocity()
-        enoxa = self.check_enoxa()
-        rec_enoxa = self.check_rec_enoxa()
-        infusion = self.check_infusion()
-        rec_infusion = self.check_rec_infusion()
-        event = self.check_event()
         comment = self.check_comment()
 
-        for elem, heading in zip([v_top, v_tail, enoxa, rec_enoxa, infusion, rec_infusion],
-                                 ["Vtop", "Vtail", "Enoxa", "RecEnoxa", "Infusion", "RecInfusion"]):
-            if isinstance(elem, bool):
-                if elem:
-                    continue
+        if (current_type_value == "Vtop") or (current_type_value == "Vtail"):
+            v_value = self.check_velocity()
+            if isinstance(v_value, bool):
+                if v_value:
+                    pass
                 else:
-                    sub_errors.append(heading)
+                    sub_errors.append(current_type_value)
             else:
-                sub_res.append((date + time, heading, elem, comment))
-
-        if not isinstance(event, bool):
-            sub_res.append((date + time, "Event", event, comment))
+                sub_res.append((date + time, current_type_value, v_value, comment))
+        elif current_type_value in ["Enoxa", "RecEnoxa", "Infusion", "RecInfusion"]:
+            if (current_type_value == "Enoxa") or (current_type_value == "RecEnoxa"):
+                value = self.check_enoxa()
+            else:
+                value = self.check_infusion()
+            enoxa_multiplier = self.check_multiplier()
+            if isinstance(value, bool):
+                if value:
+                    pass
+                else:
+                    sub_errors.append(current_type_value)
+            else:
+                as_datetime = datetime.strptime(date + time, "%d/%m/%Y %H:%M")
+                if (current_type_value == "RecEnoxa") or (current_type_value == "RecInfusion"):
+                    dts = [(as_datetime + timedelta(hours=i * 12)).strftime("%d/%m/%Y %H:%M") for
+                           i in range(enoxa_multiplier)]
+                else:
+                    dts = [(as_datetime - timedelta(hours=i * 12)).strftime("%d/%m/%Y %H:%M") for
+                           i in range(enoxa_multiplier)]
+                for elem in dts:
+                    sub_res.append((elem, current_type_value, value, comment))
+        elif current_type_value == "Event":
+            event_value = self.check_event()
+            if isinstance(event_value, bool):
+                if event_value:
+                    pass
+                else:
+                    sub_errors.append(current_type_value)
+            else:
+                sub_res.append((date + time, current_type_value, event_value, comment))
 
         to_ret = np.array(sub_res,
                           dtype=[('DATE', '<U24'), ('TYPE', '<U11'),
@@ -214,24 +261,14 @@ class InputDialog(QtW.QDialog):
         var_name = temp_var.strftime(" %H:%M")
         return var_name
 
-    def check_top_velocity(self):
+    def check_velocity(self):
         """
         Получаем на вход значение из виджета top скорости, и передаем на вход в функцию, где чистим от запятых,
         превращаем в float, запускам проверку значения. Скорость должна быть 0 < vel <= 90.
 
         :return: True, если пустая, float, если прошла проверки, False, если ошибка
         """
-        temp_var = self.v_top_edit.text()
-        return check_abstract_velocity(temp_var)
-
-    def check_tail_velocity(self):
-        """
-        Получаем на вход значение из виджета tail скорости, и передаем на вход в функцию, где чистим от запятых,
-        превращаем в float, запускам проверку значения. Скорость должна быть 0 < vel <= 90.
-
-        :return: True, если пустая, float, если прошла проверки, False, если ошибка
-        """
-        temp_var = self.v_tail_edit.text()
+        temp_var = self.types_keeper[self.type_edit.currentText()]["edit"].text()
         return check_abstract_velocity(temp_var)
 
     def check_enoxa(self):
@@ -243,19 +280,7 @@ class InputDialog(QtW.QDialog):
 
         :return: True, если пустая, int, если прошла проверки, False, если ошибка
         """
-        temp_var = self.enoxa_edit.text()
-        return check_abstract_enoxa(temp_var)
-
-    def check_rec_enoxa(self):
-        """
-        Получаем из виджета значение в мл, подаем на вход проверочной функции.
-        Там значение переводится в МЕ, проверяются границы — 0 <= enoxa <= 30000
-        Водят в мл, *10000 -> получаем МЕ
-        Ограничения  от 0 до 30 000 МЕ
-
-        :return: True, если пустая, int, если прошла проверки, False, если ошибка
-        """
-        temp_var = self.rec_enoxa_edit.text()
+        temp_var = self.types_keeper[self.type_edit.currentText()]["edit"].text()
         return check_abstract_enoxa(temp_var)
 
     def check_infusion(self):
@@ -263,23 +288,19 @@ class InputDialog(QtW.QDialog):
         Получаем значение в МЕ/ч из виджета, запускаем проверку.
         :return: True, если пустая, int, если прошла проверки, False, если ошибка
         """
-        temp_var = self.infusion_edit.text()
+        temp_var = self.types_keeper[self.type_edit.currentText()]["edit"].text()
         return check_abstract_infusion(temp_var)
 
-    def check_rec_infusion(self):
-        """
-        Получаем значение в МЕ/ч из виджета, запускаем проверку.
-        :return: True, если пустая, int, если прошла проверки, False, если ошибка
-        """
-        temp_var = self.rec_infusion_edit.text()
-        return check_abstract_infusion(temp_var)
+    def check_multiplier(self):
+        temp_var = self.types_keeper[self.type_edit.currentText()]["multiplier"].currentText()
+        return int(temp_var)
 
     def check_event(self):
         """
         Тут нет проверок, так как тяжело ошибиться...
         :return: True, если пустая, str, если заполнена
         """
-        temp_var = self.event_edit.currentText()
+        temp_var = self.types_keeper[self.type_edit.currentText()]["edit"].currentText()
         if temp_var == "":
             var_name = True
         else:
