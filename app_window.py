@@ -44,6 +44,8 @@ class MainWindow(QtW.QWidget):
         button_new_file.clicked.connect(self.create_text_file)
 
         self.file_title = QtW.QLabel("Patient name")
+        button_default_view = QtW.QPushButton("Default view")
+        button_default_view.clicked.connect(self.set_default_view)
 
         self.button_add_row = QtW.QPushButton('Add new row')
         self.button_add_row.clicked.connect(self.add_new_row)
@@ -62,7 +64,8 @@ class MainWindow(QtW.QWidget):
         grid.setSpacing(10)
         grid.addWidget(button_open_file, 1, 0)
         grid.addWidget(button_new_file, 1, 1)
-        grid.addWidget(self.file_title, 2, 0, 1, 2)
+        grid.addWidget(self.file_title, 2, 0, 1, 1)
+        grid.addWidget(button_default_view, 2, 2)
         grid.addWidget(self.button_add_row, 3, 0)
         grid.addWidget(self.button_delete_row, 3, 1)
         grid.addWidget(self.table, 4, 0, 10, 3)
@@ -150,6 +153,10 @@ class MainWindow(QtW.QWidget):
                 self.data_keeper = np.delete(self.data_keeper, index.row())
                 self.table.removeRow(index.row())
             self.update_table()
+
+    def set_default_view(self):
+        self.plot.p1.setYRange(0, 90)
+        self.plot.p2.setYRange(0, 30000)
 
     def update_table(self):
         self.table.setData(self.data_keeper)

@@ -50,6 +50,8 @@ class LegendPlotter(QtW.QWidget):
         self.plot.addLegend(colCount=2)
         self.draw_plots()
         self.plot.setXRange(-2, 2)
+        self.plot.hideAxis('bottom')
+        self.plot.hideAxis('left')
 
     def draw_plots(self):
         x_ = [0, 1]
