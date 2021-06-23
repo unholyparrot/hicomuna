@@ -1,14 +1,60 @@
 {
   "Table": {
-    "Headings": ["Date","Vtop","Vtail","Enoxa","RecEnoxa","Infusion","RecInfusion","Event","Comment"]
+    "Headings": ["DATE","TYPE","VALUE","COMMENT"]
   },
   "Plot": {
     "AxisItems": {
-      "bottomAxis": "Date",
+      "bottomAxis": "DATE",
       "leftAxis": ["Vtop", "Vtail"],
       "rightAxis": ["Enoxa", "RecEnoxa", "Infusion","RecInfusion"]
     },
-    "ToUpdate": ["Vtop","Vtail","Enoxa","RecEnoxa","Infusion","RecInfusion"]
+    "ToUpdate": ["Vtop","Vtail","Enoxa","RecEnoxa","Infusion","RecInfusion"],
+    "Coefficients": {
+      "Vtop": 1,
+      "Vtail":1,
+      "Enoxa": 1,
+      "RecEnoxa":1,
+      "Infusion": 12,
+      "RecInfusion":12
+    },
+    "PointsStyle": {
+      "Vtop": {
+        "symbol": "o",
+        "pen": "#CC0000",
+        "symbolBrush": "#CC0000"
+      },
+      "Vtail": {
+        "symbol": "s",
+        "pen": "#FF8000",
+        "symbolBrush": "#FF8000"
+      },
+      "Enoxa": {
+        "symbol": "t",
+        "pen": "#FFFF00",
+        "symbolBrush": "#FFFF00"
+      },
+      "RecEnoxa": {
+        "symbol": "p",
+        "pen": "#80FF00",
+        "symbolBrush": "#80FF00"
+      },
+      "Infusion": {
+        "symbol": "h",
+        "pen": "#00FFFF",
+        "symbolBrush": "#00FFFF"
+      },
+      "RecInfusion": {
+        "symbol": "d",
+        "pen": "#0080FF",
+        "symbolBrush": "#0080FF"
+      },
+      "Event": {
+        "symbol": "star",
+        "pen": "#00000000",
+        "symbolBrush": "#660033",
+        "symbolSize": 20
+      }
+    }
   },
   "PlotWidget": {
     "Axis": {
@@ -19,7 +65,7 @@
   },
   "InputDialog": {
     "Events": {
-      "Enum": ["Нет событий","Трахеостома", "Тромб", "Прочее"],
+      "Enum": ["","Нет событий","Трахеостома", "Тромб", "Прочее"],
       "Default": 0
     }
   }

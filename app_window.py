@@ -1,4 +1,5 @@
 import sys
+import re
 import time
 import datetime
 import numpy as np
@@ -55,7 +56,7 @@ class MainWindow(QtW.QWidget):
 
         self.plot = drawer_and_up.pyqtdrawer.Plotter(self.config_dict["PlotWidget"])
         self.draw_plot()
-        # legend_plot = drawer_and_up.pyqtdrawer.LegendPlotter()
+        legend_plot = drawer_and_up.pyqtdrawer.LegendPlotter(self.config_dict["Plot"]["PointsStyle"])
 
         grid = QtW.QGridLayout()
         grid.setSpacing(10)
@@ -64,9 +65,9 @@ class MainWindow(QtW.QWidget):
         grid.addWidget(self.file_title, 2, 0, 1, 2)
         grid.addWidget(self.button_add_row, 3, 0)
         grid.addWidget(self.button_delete_row, 3, 1)
-        grid.addWidget(self.table, 4, 0, 4, 2)
-        grid.addWidget(self.plot.pw, 1, 2, 6, 4)
-        # grid.addWidget(legend_plot, 7, 2, 3, 4)
+        grid.addWidget(self.table, 4, 0, 10, 3)
+        grid.addWidget(self.plot.pw, 1, 3, 12, 6)
+        grid.addWidget(legend_plot.pw, 13, 3, 1, 6)
 
         self.setLayout(grid)
 
@@ -88,12 +89,13 @@ class MainWindow(QtW.QWidget):
         if file_name.endswith('.csv'):
             self.file_title.setText(file_name)
             # noinspection PyTypeChecker
-            self.data_keeper = np.genfromtxt(file_name, delimiter=",", names=True,
-                                             dtype=[('Date', '<U32'), ('Vtop', '<f8'), ('Vtail', '<f8'),
-                                                    ('Enoxa', '<i4'),
-                                                    ('RecEnoxa', '<i4'), ('Infusion', '<i4'), ('RecInfusion', '<i4'),
-                                                    ('Event', '<U32'), ('Comment', '<U32')], encoding="utf-8")
-            self.data_keeper = self.data_keeper[sort_dates(self.data_keeper["Date"])]
+            self.data_keeper = np.genfromtxt(file_name, delimiter=";", names=True,
+                                             dtype=[('DATE', '<U24'), ('TYPE', '<U11'),
+                                                    ('VALUE', '<U11'), ('COMMENT', '<U128')],
+                                             encoding="utf-8")
+            self.data_keeper = self.data_keeper[sort_dates(self.data_keeper["DATE"])]
+            self.data_keeper["VALUE"] = np.array([re.sub(",", ".", x) for x in self.data_keeper["VALUE"]],
+                                                 dtype='<U24')
             self.update_table()
             self.update_plot()
             self.button_add_row.setEnabled(True)
@@ -116,7 +118,7 @@ class MainWindow(QtW.QWidget):
 
         if file_name[0].endswith('.csv'):
             with open(file_name[0], "w", encoding="utf-8") as fw:
-                fw.write(",".join(self.config_dict["Table"]["Headings"]) + '\n')
+                fw.write(";".join(self.config_dict["Table"]["Headings"]) + '\n')
         else:
             print("Please, save in CSV")
         self.filename = file_name[0]
@@ -130,19 +132,24 @@ class MainWindow(QtW.QWidget):
                 self.data_keeper = values
             else:
                 self.data_keeper = np.concatenate((self.data_keeper, values))
-                self.data_keeper = self.data_keeper[sort_dates(self.data_keeper["Date"])]
+                self.data_keeper = self.data_keeper[sort_dates(self.data_keeper["DATE"])]
             self.update_table()
 
     def delete_row(self):
-        index_list = []
-        for model_index in self.table.selectionModel().selectedRows():
-            index = QtC.QPersistentModelIndex(model_index)
-            index_list.append(index)
+        reply = QtW.QMessageBox.question(self, 'Message',
+                                         "Are you sure to delete selected?", QtW.QMessageBox.Yes |
+                                         QtW.QMessageBox.No, QtW.QMessageBox.No)
 
-        for index in index_list:
-            self.data_keeper = np.delete(self.data_keeper, index.row())
-            self.table.removeRow(index.row())
-        self.update_table()
+        if reply == QtW.QMessageBox.Yes:
+            index_list = []
+            for model_index in self.table.selectionModel().selectedRows():
+                index = QtC.QPersistentModelIndex(model_index)
+                index_list.append(index)
+
+            for index in index_list:
+                self.data_keeper = np.delete(self.data_keeper, index.row())
+                self.table.removeRow(index.row())
+            self.update_table()
 
     def update_table(self):
         self.table.setData(self.data_keeper)
@@ -152,27 +159,39 @@ class MainWindow(QtW.QWidget):
         item = self.table.item(row, column)
         self.data_keeper[row][column] = item.text()
         with open(self.filename, "w", encoding="utf-8") as fw:
-            fw.write(",".join(self.config_dict["Table"]["Headings"]) + '\n')
+            fw.write(";".join(self.config_dict["Table"]["Headings"]) + '\n')
             for elem in self.data_keeper:
-                fw.write(','.join(map(str, elem)) + '\n')
+                fw.write(';'.join(map(str, elem)) + '\n')
         self.update_plot()
 
     def update_plot(self):
         for heading in self.config_dict["Plot"]["ToUpdate"]:
-            x_ = timestamps_from_dates(self.data_keeper[self.config_dict["Plot"]["AxisItems"]["bottomAxis"]])
-            y_ = self.data_keeper[heading]
-            self.scatter_plots[heading].setData(x=x_, y=y_)
+            mask = np.where(self.data_keeper["TYPE"] == heading)
+            x_ = timestamps_from_dates(self.data_keeper[self.config_dict["Plot"]["AxisItems"]["bottomAxis"]][mask])
+            y_ = self.config_dict["Plot"]["Coefficients"][heading] * self.data_keeper["VALUE"][mask].astype(float)
+            self.scatter_plots[heading].setData(x=x_, y=y_,
+                                                **self.config_dict["Plot"]["PointsStyle"][heading])
+
+        mask = np.where((self.data_keeper["TYPE"] == "Event") & (self.data_keeper["VALUE"] != ""))
+        x_ = timestamps_from_dates(self.data_keeper[self.config_dict["Plot"]["AxisItems"]["bottomAxis"]][mask])
+        y_ = np.array([0 for _ in range(len(x_))])
+        self.scatter_plots["Event"].setData(x=x_, y=y_,
+                                            **self.config_dict["Plot"]["PointsStyle"]["Event"])
 
     def draw_plot(self):
         x_ = timestamps_from_dates(["01/01/2021 01:10", "01/01/2021 17:41"])
         for heading in self.config_dict["Plot"]["AxisItems"]["leftAxis"]:
             y_ = [1, 2]
-            self.scatter_plots[heading] = pg.ScatterPlotItem(x=x_, y=y_)
+            self.scatter_plots[heading] = pg.PlotDataItem(x=x_, y=y_)
             self.plot.p1.addItem(self.scatter_plots[heading])
         for heading in self.config_dict["Plot"]["AxisItems"]["rightAxis"]:
             y_ = [2000, 3000]
-            self.scatter_plots[heading] = pg.ScatterPlotItem(x=x_, y=y_)
+            self.scatter_plots[heading] = pg.PlotDataItem(x=x_, y=y_)
             self.plot.p2.addItem(self.scatter_plots[heading])
+        y_ = [0, 0]
+        self.scatter_plots["Event"] = pg.PlotDataItem(x=x_, y=y_,
+                                                      **self.config_dict["Plot"]["PointsStyle"]["Event"])
+        self.plot.p1.addItem(self.scatter_plots["Event"])
 
 
 if __name__ == '__main__':

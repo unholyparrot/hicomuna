@@ -1,3 +1,4 @@
+import re
 import PyQt5.QtWidgets as QtW
 import PyQt5.QtCore as QtC
 import numpy as np
@@ -24,6 +25,46 @@ class EventChoice(QtW.QComboBox):
         super(EventChoice, self).__init__(parent)
         self.q_dict = q_dict
         self.addItems(self.q_dict["Enum"])
+
+
+def check_abstract_velocity(value):
+    if value == "":
+        var_name = True
+    else:
+        try:
+            temp_var = re.sub(",", ".", value)
+            var_name = float(temp_var)
+            if (var_name < 0) or (var_name > 90):
+                var_name = False
+        except ValueError:
+            var_name = False
+    return var_name
+
+
+def check_abstract_enoxa(value):
+    if value == "":
+        var_name = True
+    else:
+        try:
+            temp_var = float(value) * 30000
+            if (temp_var < 0) or (temp_var > 30000):
+                var_name = False
+            else:
+                var_name = int(temp_var)
+        except ValueError:
+            var_name = False
+    return var_name
+
+
+def check_abstract_infusion(value):
+    if value == "":
+        var_name = True
+    else:
+        try:
+            var_name = int(value)
+        except ValueError:
+            var_name = False
+    return var_name
 
 
 class InputDialog(QtW.QDialog):
@@ -60,8 +101,8 @@ class InputDialog(QtW.QDialog):
         v_top_label = QtW.QLabel("V top, mkm/s")
         v_tail_label = QtW.QLabel("V tail, mkm/s")
 
-        enoxa_label = QtW.QLabel("Enoxa, ME")
-        rec_enoxa_label = QtW.QLabel("Recommended Enoxa, ME")
+        enoxa_label = QtW.QLabel("Enoxa, ml")
+        rec_enoxa_label = QtW.QLabel("Recommended Enoxa, ml")
 
         infusion_label = QtW.QLabel("Infusion, ME/h")
         rec_infusion_label = QtW.QLabel("Recommended Infusion, ME/h")
@@ -123,6 +164,8 @@ class InputDialog(QtW.QDialog):
             self.close()
 
     def check_values(self):
+        sub_res = list()
+        sub_errors = list()
         date = self.check_date()
         time = self.check_time()
         v_top = self.check_top_velocity()
@@ -134,11 +177,31 @@ class InputDialog(QtW.QDialog):
         event = self.check_event()
         comment = self.check_comment()
 
-        to_ret = np.array([(date + time, v_top, v_tail, enoxa, rec_enoxa, infusion, rec_infusion, event, comment)],
-                          dtype=[('Date', '<U32'), ('Vtop', '<f8'), ('Vtail', '<f8'), ('Enoxa', '<i4'),
-                                 ('RecEnoxa', '<i4'), ('Infusion', '<i4'), ('RecInfusion', '<i4'),
-                                 ('Event', '<U32'), ('Comment', '<U32')])
+        for elem, heading in zip([v_top, v_tail, enoxa, rec_enoxa, infusion, rec_infusion],
+                                 ["Vtop", "Vtail", "Enoxa", "RecEnoxa", "Infusion", "RecInfusion"]):
+            if isinstance(elem, bool):
+                if elem:
+                    continue
+                else:
+                    sub_errors.append(heading)
+            else:
+                sub_res.append((date + time, heading, elem, comment))
 
+        if not isinstance(event, bool):
+            sub_res.append((date + time, "Event", event, comment))
+
+        to_ret = np.array(sub_res,
+                          dtype=[('DATE', '<U24'), ('TYPE', '<U11'),
+                                 ('VALUE', '<U11'), ('COMMENT', '<U128')])
+        if len(sub_errors) > 0:
+            errors_text = ""
+            for heading in sub_errors:
+                errors_text += "* {0} \n".format(heading)
+            msg = QtW.QMessageBox()
+            msg.setWindowTitle("Error during handling input")
+            msg.setText("The following fields were not added due to errors in values: \n" + errors_text)
+            msg.setIcon(QtW.QMessageBox.Critical)
+            msg.exec_()
         return to_ret
 
     def check_date(self):
@@ -153,68 +216,81 @@ class InputDialog(QtW.QDialog):
 
     def check_top_velocity(self):
         """
-        Vel 0 .. 90
-        :return:
+        Получаем на вход значение из виджета top скорости, и передаем на вход в функцию, где чистим от запятых,
+        превращаем в float, запускам проверку значения. Скорость должна быть 0 < vel <= 90.
+
+        :return: True, если пустая, float, если прошла проверки, False, если ошибка
         """
         temp_var = self.v_top_edit.text()
-        var_name = float(temp_var)
-        return float(var_name)
+        return check_abstract_velocity(temp_var)
 
     def check_tail_velocity(self):
         """
-        Vel 0 .. 90
-        :return:
+        Получаем на вход значение из виджета tail скорости, и передаем на вход в функцию, где чистим от запятых,
+        превращаем в float, запускам проверку значения. Скорость должна быть 0 < vel <= 90.
+
+        :return: True, если пустая, float, если прошла проверки, False, если ошибка
         """
         temp_var = self.v_tail_edit.text()
-        var_name = float(temp_var)
-        return var_name
+        return check_abstract_velocity(temp_var)
 
     def check_enoxa(self):
         """
+        Получаем из виджета значение в мл, подаем на вход проверочной функции.
+        Там значение переводится в МЕ, проверяются границы — 0 <= enoxa <= 30000
         Водят в мл, *10000 -> получаем МЕ
         Ограничения от 0 до 30 000 МЕ
-        :return:
+
+        :return: True, если пустая, int, если прошла проверки, False, если ошибка
         """
         temp_var = self.enoxa_edit.text()
-        var_name = int(temp_var)
-        return var_name
+        return check_abstract_enoxa(temp_var)
 
     def check_rec_enoxa(self):
         """
+        Получаем из виджета значение в мл, подаем на вход проверочной функции.
+        Там значение переводится в МЕ, проверяются границы — 0 <= enoxa <= 30000
         Водят в мл, *10000 -> получаем МЕ
         Ограничения  от 0 до 30 000 МЕ
-        :return:
+
+        :return: True, если пустая, int, если прошла проверки, False, если ошибка
         """
         temp_var = self.rec_enoxa_edit.text()
-        var_name = int(temp_var)
-        return var_name
+        return check_abstract_enoxa(temp_var)
 
     def check_infusion(self):
         """
-        Инфузия в МЕ \ ч, при попадании на график умножается на 12. В таблице в том виде, как ввели,
-        на графике *12
-        :return:
+        Получаем значение в МЕ/ч из виджета, запускаем проверку.
+        :return: True, если пустая, int, если прошла проверки, False, если ошибка
         """
         temp_var = self.infusion_edit.text()
-        var_name = int(temp_var)
-        return var_name
+        return check_abstract_infusion(temp_var)
 
     def check_rec_infusion(self):
         """
-        Инфузия в МЕ \ ч, при попадании на график умножается на 12. В таблице в том виде, как ввели,
-        на графике *12
-        :return:
+        Получаем значение в МЕ/ч из виджета, запускаем проверку.
+        :return: True, если пустая, int, если прошла проверки, False, если ошибка
         """
         temp_var = self.rec_infusion_edit.text()
-        var_name = int(temp_var)
-        return var_name
+        return check_abstract_infusion(temp_var)
 
     def check_event(self):
+        """
+        Тут нет проверок, так как тяжело ошибиться...
+        :return: True, если пустая, str, если заполнена
+        """
         temp_var = self.event_edit.currentText()
-        var_name = temp_var
+        if temp_var == "":
+            var_name = True
+        else:
+            var_name = temp_var
         return var_name
 
     def check_comment(self):
+        """
+        Тут нет проверок, так как тяжело ошибиться...
+        :return: str
+        """
         temp_var = self.comment_edit.toPlainText()
         var_name = temp_var
         return var_name
