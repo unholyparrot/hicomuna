@@ -14,7 +14,7 @@
 
 ```bash
 $ git clone https://github.com/unholyparrot/hicomuna.git
-$ cd monitowl-agent
+$ cd hicomuna
 $ pip install -r requirements.txt
 $ pip install pyinstaller
 $ pyinstaller hicomuna.spec
