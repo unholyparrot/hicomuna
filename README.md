@@ -4,11 +4,24 @@
 
 ## Последнее обновление
 
-Точки теперь "нажимаемые", как на графике, так и из таблицы. Изменен виджет добавления новой серии данных.
+Добавлены уведомления при возникновении ошибки создания / открытия файла.
 
 ## Требования
 
 Необходимые пакеты перечислены в [requirements.txt](./requirements.txt "требования").
+
+## Самостоятельная сборка исполняемого файла
+
+```bash
+$ git clone https://github.com/unholyparrot/hicomuna.git
+$ cd monitowl-agent
+$ pip install -r requirements.txt
+$ pip install pyinstaller
+$ pyinstaller hicomuna.spec
+```
+
+Исполняемый файл `hicomuna.exe` будет в директории *dist/hicomuna*. В директории *dist/hicomuna/example_data*
+находятся примеры файлов для записи данных.
 
 ## Настройка отображения
 

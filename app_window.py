@@ -1,4 +1,5 @@
 import re
+import os
 import time
 import datetime
 import numpy as np
@@ -95,7 +96,7 @@ class MainWindow(QtW.QWidget):
 
     def load_any_file(self, file_name):
         if file_name.endswith('.csv'):
-            self.file_title.setText(file_name)
+            self.file_title.setText(os.path.basename(file_name))
             # noinspection PyTypeChecker
             self.data_keeper = np.genfromtxt(file_name, delimiter=";", names=True,
                                              dtype=[('DATE', '<U24'), ('TYPE', '<U11'),
@@ -109,7 +110,11 @@ class MainWindow(QtW.QWidget):
             self.button_add_row.setEnabled(True)
             self.button_delete_row.setEnabled(True)
         else:
-            print("CSV extension expected.")
+            msg = QtW.QMessageBox()
+            msg.setWindowTitle("CSV expected")
+            msg.setText("{0} is not CSV".format(file_name))
+            msg.setIcon(QtW.QMessageBox.Critical)
+            msg.exec_()
 
     def get_text_file(self):
         dialog = QtW.QFileDialog()
@@ -122,7 +127,7 @@ class MainWindow(QtW.QWidget):
             self.load_any_file(self.filename)
 
     def create_text_file(self):
-        file_name = QtW.QFileDialog.getSaveFileName(self, 'Save File')
+        file_name = QtW.QFileDialog.getSaveFileName(self, 'Create File')
 
         if file_name[0].endswith('.csv'):
             with open(file_name[0], "w", encoding="utf-8") as fw:

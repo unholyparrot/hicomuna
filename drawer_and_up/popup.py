@@ -86,30 +86,30 @@ class InputDialog(QtW.QDialog):
 
         self.types_keeper = {
             "Vtop": {
-                "label": QtW.QLabel("Vtop"),
+                "label": QtW.QLabel("Vtop, mkm/m"),
                 "edit": QtW.QLineEdit()
             },
             "Vtail": {
-                "label": QtW.QLabel("Vtail"),
+                "label": QtW.QLabel("Vtail, mkm/m"),
                 "edit": QtW.QLineEdit()
             },
             "Enoxa": {
-                "label": QtW.QLabel("Enoxa"),
+                "label": QtW.QLabel("Enoxa, ml"),
                 "edit": QtW.QLineEdit(),
                 "multiplier": EventChoice(self.q_dict["Multiplies"])
             },
             "RecEnoxa": {
-                "label": QtW.QLabel("RecEnoxa"),
+                "label": QtW.QLabel("RecEnoxa, ml"),
                 "edit": QtW.QLineEdit(),
                 "multiplier": EventChoice(self.q_dict["Multiplies"])
             },
             "Infusion": {
-                "label": QtW.QLabel("Infusion"),
+                "label": QtW.QLabel("Infusion, ME/h"),
                 "edit": QtW.QLineEdit(),
                 "multiplier": EventChoice(self.q_dict["Multiplies"])
             },
             "RecInfusion": {
-                "label": QtW.QLabel("RecInfusion"),
+                "label": QtW.QLabel("RecInfusion, ME/h"),
                 "edit": QtW.QLineEdit(),
                 "multiplier": EventChoice(self.q_dict["Multiplies"])
             },
