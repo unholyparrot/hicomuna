@@ -1,4 +1,3 @@
-import sys
 import re
 import time
 import datetime
@@ -248,7 +247,4 @@ class MainWindow(QtW.QWidget):
 
 
 if __name__ == '__main__':
-
-    app = QtW.QApplication(sys.argv)
-    ex = MainWindow({"Table": {"Headings": ["a", "b", "c", "d"]}})
-    sys.exit(app.exec_())
+    print("a b o b a")

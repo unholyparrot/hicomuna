@@ -220,11 +220,11 @@ class InputDialog(QtW.QDialog):
             else:
                 as_datetime = datetime.strptime(date + time, "%d/%m/%Y %H:%M")
                 if (current_type_value == "RecEnoxa") or (current_type_value == "RecInfusion"):
-                    dts = [(as_datetime + timedelta(hours=i * 12)).strftime("%d/%m/%Y %H:%M") for
-                           i in range(enoxa_multiplier)]
+                    dts = [(as_datetime + i * timedelta(hours=int(24 / enoxa_multiplier))).strftime("%d/%m/%Y %H:%M")
+                           for i in range(enoxa_multiplier)]
                 else:
-                    dts = [(as_datetime - timedelta(hours=i * 12)).strftime("%d/%m/%Y %H:%M") for
-                           i in range(enoxa_multiplier)]
+                    dts = [(as_datetime + i * timedelta(hours=int(24 / enoxa_multiplier))).strftime("%d/%m/%Y %H:%M")
+                           for i in range(enoxa_multiplier)]
                 for elem in dts:
                     sub_res.append((elem, current_type_value, value, comment))
         elif current_type_value == "Event":
