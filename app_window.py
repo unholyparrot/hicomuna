@@ -1,8 +1,8 @@
 import re
-import os
 import time
 import datetime
 import numpy as np
+import pandas as pd
 import pyqtgraph as pg
 import PyQt5.QtWidgets as QtW
 import PyQt5.QtCore as QtC
@@ -11,18 +11,25 @@ import drawer_and_up
 
 def timestamps_from_dates(array):
     to_ret = []
-    for elem in array:
-        to_ret.append(time.mktime(datetime.datetime.strptime(elem, "%d/%m/%Y %H:%M").timetuple()))
+    for dt in array:
+        if "/" in dt:
+            pattern = "%d/%m/%Y %H:%M"
+        else:
+            pattern = "%Y-%m-%d %H:%M:%S"
+        to_ret.append(time.mktime(datetime.datetime.strptime(dt, pattern).timetuple()))
     return to_ret
 
 
 def date_from_timestamp(value):
-    return datetime.datetime.fromtimestamp(value).strftime("%d/%m/%Y %H:%M")
+    pattern = "%d/%m/%Y %H:%M"
+    res = datetime.datetime.fromtimestamp(value).strftime(pattern)
+    return res
 
 
-def sort_dates(array):
-    sub_arr = timestamps_from_dates(array)
-    return np.argsort(sub_arr)
+def reformat_dates(value):
+    ts = timestamps_from_dates([value])
+    date = date_from_timestamp(ts[0])
+    return date
 
 
 class MainWindow(QtW.QWidget):
@@ -33,20 +40,25 @@ class MainWindow(QtW.QWidget):
         self.table = None
         self.plot = None
         self.file_title = None
-        self.data_keeper = None
-        self.filename = None
+        self.df = None
+        self.file_keeper = drawer_and_up.filehandler.FileHandler("no_path/nowhere.np", config_dict)
         self.scatter_plots = dict()
         self.line_plots = dict()
         self.button_add_row = None
         self.button_delete_row = None
+        self.button_save_changes = None
         self.chosen_points = list()
         self.init_ui()
 
     def init_ui(self):
-        button_open_file = QtW.QPushButton('Open CSV file')
+        button_open_file = QtW.QPushButton('Open Table')
         button_open_file.clicked.connect(self.get_text_file)
-        button_new_file = QtW.QPushButton('Create CSV file')
+        button_new_file = QtW.QPushButton('Create Table')
         button_new_file.clicked.connect(self.create_text_file)
+        self.button_save_changes = QtW.QPushButton('Save changes')
+        self.button_save_changes.clicked.connect(self.save_changes)
+        self.button_save_changes.setEnabled(False)
+        self.button_save_changes.setStyleSheet("background-color: lightgray")
 
         self.file_title = QtW.QLabel("Patient name")
         button_default_view = QtW.QPushButton("Default view")
@@ -60,6 +72,7 @@ class MainWindow(QtW.QWidget):
         self.button_delete_row.setEnabled(False)
 
         self.table = pg.TableWidget(editable=True, sortable=False)
+        self.table.cellChanged.connect(self.table_changed)
         self.table.itemSelectionChanged.connect(self.table_clicked)
 
         self.plot = drawer_and_up.pyqtdrawer.Plotter(self.config_dict["PlotWidget"])
@@ -70,6 +83,7 @@ class MainWindow(QtW.QWidget):
         grid.setSpacing(10)
         grid.addWidget(button_open_file, 1, 0)
         grid.addWidget(button_new_file, 1, 1)
+        grid.addWidget(self.button_save_changes, 1, 2)
         grid.addWidget(self.file_title, 2, 0, 1, 1)
         grid.addWidget(button_default_view, 2, 2)
         grid.addWidget(self.button_add_row, 3, 0)
@@ -81,72 +95,117 @@ class MainWindow(QtW.QWidget):
         self.setLayout(grid)
 
         self.setGeometry(50, 50, 1250, 650)
-        self.setWindowTitle('Hicomuna')
+        self.setWindowTitle('Hicomuna {}'.format(self.config_dict["Version"]))
         self.show()
 
     def closeEvent(self, event):
-        reply = QtW.QMessageBox.question(self, 'Message',
-                                         "Are you sure to quit?", QtW.QMessageBox.Yes |
-                                         QtW.QMessageBox.No, QtW.QMessageBox.No)
-
-        if reply == QtW.QMessageBox.Yes:
-            event.accept()
+        """
+        Перезаписанный метод, при нажатии кнопки закрытия предлагает либо сохранить изменённый файл (если был изменён),
+        либо просто спрашивает, закрыть или нет.
+        :param event: event == close file
+        :return:
+        """
+        if self.file_keeper.status_saved:
+            reply = QtW.QMessageBox.question(self, 'Message',
+                                             "Quit?", QtW.QMessageBox.Yes |
+                                             QtW.QMessageBox.No, QtW.QMessageBox.No)
+            if reply == QtW.QMessageBox.Yes:
+                event.accept()
+            else:
+                event.ignore()
         else:
-            event.ignore()
+            self.ask_if_save_file()
+            reply = QtW.QMessageBox.question(self, 'Message',
+                                             "Quit?", QtW.QMessageBox.Yes |
+                                             QtW.QMessageBox.No, QtW.QMessageBox.No)
+            if reply == QtW.QMessageBox.Yes:
+                event.accept()
+            else:
+                event.ignore()
 
-    def load_any_file(self, file_name):
-        if file_name.endswith('.csv'):
-            self.file_title.setText(os.path.basename(file_name))
-            # noinspection PyTypeChecker
-            self.data_keeper = np.genfromtxt(file_name, delimiter=";", names=True,
-                                             dtype=[('DATE', '<U24'), ('TYPE', '<U11'),
-                                                    ('VALUE', '<U11'), ('COMMENT', '<U128')],
-                                             encoding="utf-8")
-            self.data_keeper = self.data_keeper[sort_dates(self.data_keeper["DATE"])]
-            self.data_keeper["VALUE"] = np.array([re.sub(",", ".", x) for x in self.data_keeper["VALUE"]],
-                                                 dtype='<U24')
+    def load_any_file(self):
+        try:
+            self.file_title.setText(self.file_keeper.file_name)
+            # загружаем содержимое файла
+            self.df = self.file_keeper.load_file()
+            # нужно убедиться, что DataFrame не пуст (иначе хер нам, а не сортировка)
+            if self.df.size > 0:
+                # сортируем значения по дате (на всякий случай)
+                self.df.sort_values(by="DATE", key=timestamps_from_dates, inplace=True)
+                # исправляем запятые
+                self.df["VALUE"] = self.df["VALUE"].apply(lambda x: re.sub(",", ".", x))
+                self.df["DATE"] = self.df["DATE"].apply(lambda x: reformat_dates(x))
+            # временно выключаю проверку события изменения таблицы для безошибочной записи в таблицу новых данных
+            self.file_keeper.set_status_opening(True)
             self.update_table()
+            # а затем обратно включаю её
+            self.file_keeper.set_status_opening(False)
+            # обновляем график
             self.update_plot()
+            self.set_default_view()
             self.button_add_row.setEnabled(True)
             self.button_delete_row.setEnabled(True)
-        else:
+            self.button_save_changes.setEnabled(False)
+            self.button_save_changes.setStyleSheet("background-color: lightgray")
+        except ValueError as e:
             msg = QtW.QMessageBox()
-            msg.setWindowTitle("CSV expected")
-            msg.setText("{0} is not CSV".format(file_name))
+            msg.setWindowTitle("Loading file error")
+            msg.setText(str(e))
             msg.setIcon(QtW.QMessageBox.Critical)
             msg.exec_()
 
     def get_text_file(self):
+        if not self.file_keeper.status_saved:
+            self.ask_if_save_file()
         dialog = QtW.QFileDialog()
         dialog.setFileMode(QtW.QFileDialog.AnyFile)
         dialog.setFilter(QtC.QDir.Files)
 
         if dialog.exec_():
             file_name = dialog.selectedFiles()
-            self.filename = file_name[0]
-            self.load_any_file(self.filename)
+            self.file_keeper = drawer_and_up.filehandler.FileHandler(file_name[0],
+                                                                     self.config_dict["Table"])
+            self.load_any_file()
+
+    def ask_if_save_file(self):
+        save_reply = QtW.QMessageBox.question(self, 'Message',
+                                              "Save changes?", QtW.QMessageBox.Yes |
+                                              QtW.QMessageBox.No, QtW.QMessageBox.No)
+
+        if save_reply == QtW.QMessageBox.Yes:
+            self.file_keeper.save_file(self.df)
+            self.button_save_changes.setEnabled(False)
+            self.button_save_changes.setStyleSheet("background-color: lightgray")
 
     def create_text_file(self):
+        if not self.file_keeper.status_saved:
+            self.ask_if_save_file()
         file_name = QtW.QFileDialog.getSaveFileName(self, 'Create File')
-
-        if file_name[0].endswith('.csv'):
-            with open(file_name[0], "w", encoding="utf-8") as fw:
-                fw.write(";".join(self.config_dict["Table"]["Headings"]) + '\n')
-        else:
-            print("Please, save in CSV")
-        self.filename = file_name[0]
-        self.load_any_file(self.filename)
+        try:
+            self.file_keeper = drawer_and_up.filehandler.FileHandler(file_name[0],
+                                                                     self.config_dict["Table"])
+            self.file_keeper.create_file()
+            self.load_any_file()
+        except ValueError as e:
+            msg = QtW.QMessageBox()
+            msg.setWindowTitle("Creating file error")
+            msg.setText(str(e))
+            msg.setIcon(QtW.QMessageBox.Critical)
+            msg.exec_()
 
     def add_new_row(self):
-        w = drawer_and_up.popup.InputDialog(self.config_dict["InputDialog"])
+        rows_pull = set()
+        date = None
+        for elem in self.table.selectedItems():
+            rows_pull.add(elem.row())
+        for row in rows_pull:
+            sub_section = self.df.loc[row]
+            date = sub_section["DATE"]
+        w = drawer_and_up.popup.InputDialog(self.config_dict["InputDialog"], date)
         values = w.get_results()
         if values is not None:
-            if len(self.data_keeper) == 0:
-                self.data_keeper = values
-            else:
-                self.data_keeper = np.concatenate((self.data_keeper, values))
-                self.data_keeper = self.data_keeper[sort_dates(self.data_keeper["DATE"])]
-            self.update_table()
+            self.df = pd.concat([self.df, values], ignore_index=True)
+            self.add_or_delete_action()
 
     def delete_row(self):
         reply = QtW.QMessageBox.question(self, 'Message',
@@ -160,43 +219,92 @@ class MainWindow(QtW.QWidget):
                 index_list.append(index)
 
             for index in index_list:
-                self.data_keeper = np.delete(self.data_keeper, index.row())
+                self.df = self.df.drop(self.df.index[index.row()])
                 self.table.removeRow(index.row())
-            self.update_table()
+            self.add_or_delete_action()
+
+    def save_changes(self):
+        self.file_keeper.save_file(self.df)
+        self.button_save_changes.setEnabled(False)
+        self.button_save_changes.setStyleSheet("background-color: lightgray")
 
     def set_default_view(self):
+        """
+        Приводит график к одному, стандартному виду. Меняет масштаб осей: 0 .. 90 для скорости, 0 .. 30000 для AC,
+        минимальная и максимальная даты для нижней оси
+        :return:
+        """
         self.plot.p1.setYRange(-1, 90)
         self.plot.p2.setYRange(0, 30000)
+        if (self.df is None) or (len(self.df["DATE"].values) == 0):
+            x_ = timestamps_from_dates(["01/01/2021 01:10", "01/01/2021 17:41"])
+        else:
+            x_ = timestamps_from_dates([self.df["DATE"].values[0], self.df["DATE"].values[-1]])
+        self.plot.p1.setXRange(x_[0], x_[1])
 
     def update_table(self):
-        self.table.setData(self.data_keeper)
-        self.table.cellChanged.connect(self.table_changed)
+        self.table.setData(self.df.to_dict('index'))
 
-    def table_changed(self, row, column):
-        item = self.table.item(row, column)
-        temp_var = re.sub(",", ".", item.text())
-        self.data_keeper[row][column] = temp_var
-        with open(self.filename, "w", encoding="utf-8") as fw:
-            fw.write(";".join(self.config_dict["Table"]["Headings"]) + '\n')
-            for elem in self.data_keeper:
-                fw.write(';'.join(map(str, elem)) + '\n')
+    def add_or_delete_action(self):
+        self.df.sort_values(by="DATE", key=timestamps_from_dates, inplace=True)
+        self.file_keeper.set_status_opening(True)
+        self.update_table()
+        # а затем обратно включаю её
+        self.file_keeper.set_status_opening(False)
+        self.file_keeper.set_status_saved(False)
         self.update_plot()
+        self.set_default_view()
+        self.file_keeper.set_status_saved(False)
+        self.button_save_changes.setEnabled(True)
+        self.button_save_changes.setStyleSheet("background-color: yellow")
+
+    # TODO: переписать, добавить проверку исключений
+    def table_changed(self, row, column):
+        # если в таблицу записываются данные, а не вносятся изменения, то просто ничего не делаем
+        if self.file_keeper.status_opening:
+            pass
+        # а вот если вносятся изменения, то вносим их
+        else:
+            item = self.table.item(row, column)
+            temp_var = re.sub(",", ".", item.text())
+            self.df.iat[row, column] = temp_var
+            self.file_keeper.set_status_saved(False)
+            self.update_plot()
+            self.set_default_view()
+            self.file_keeper.set_status_saved(False)
+            self.button_save_changes.setEnabled(True)
+            self.button_save_changes.setStyleSheet("background-color: yellow")
 
     def update_plot(self):
+        """
+        Обновление данных на графике,
+        обновляются все объявленные серии, прочим передаётся пустой массив.
+        :return:
+        """
         for heading in self.config_dict["Plot"]["ToUpdate"]:
-            mask = np.where(self.data_keeper["TYPE"] == heading)
-            x_ = timestamps_from_dates(self.data_keeper[self.config_dict["Plot"]["AxisItems"]["bottomAxis"]][mask])
-            y_ = self.config_dict["Plot"]["Coefficients"][heading] * self.data_keeper["VALUE"][mask].astype(float)
+            mask = self.df[self.df["TYPE"] == heading].index
+            if len(mask) > 0:
+                x_ = timestamps_from_dates(self.df[self.config_dict["Plot"]["AxisItems"]["bottomAxis"]][mask].values)
+                y_ = self.config_dict["Plot"]["Coefficients"][heading] * self.df["VALUE"][mask].values.astype(float)
+            else:
+                x_, y_ = [], []
             self.scatter_plots[heading].setData(x=x_, y=y_,
                                                 **self.config_dict["Plot"]["PointsStyle"][heading])
 
-        mask = np.where((self.data_keeper["TYPE"] == "Event") & (self.data_keeper["VALUE"] != ""))
-        x_ = timestamps_from_dates(self.data_keeper[self.config_dict["Plot"]["AxisItems"]["bottomAxis"]][mask])
-        y_ = np.array([-1 for _ in range(len(x_))])
+        mask = self.df[(self.df["TYPE"] == "Event") & (self.df["VALUE"] != "")].index
+        if len(mask) > 0:
+            x_ = timestamps_from_dates(self.df[self.config_dict["Plot"]["AxisItems"]["bottomAxis"]][mask].values)
+            y_ = np.array([-1 for _ in range(len(x_))])
+        else:
+            x_, y_ = [], []
         self.scatter_plots["Event"].setData(x=x_, y=y_,
                                             **self.config_dict["Plot"]["PointsStyle"]["Event"])
 
     def draw_plot(self):
+        """
+        Вызывается один раз при запуске приложения для первичной отрисовки графика
+        :return:
+        """
         x_ = timestamps_from_dates(["01/01/2021 01:10", "01/01/2021 17:41"])
         for heading in self.config_dict["Plot"]["AxisItems"]["leftAxis"]:
             y_ = [1, 2]
@@ -223,10 +331,10 @@ class MainWindow(QtW.QWidget):
             date = date_from_timestamp(elem.pos()[0])
             value = elem.pos()[1]
             top_res = 0
-            for s_d in np.where(self.data_keeper["DATE"] == date)[0]:
+            for s_d in np.where(self.df["DATE"] == date)[0]:
                 try:
-                    table_var = self.data_keeper[s_d]["VALUE"].astype(float) * \
-                                self.config_dict["Plot"]["Coefficients"][self.data_keeper[s_d]["TYPE"]]
+                    table_var = float(self.df.loc[s_d]["VALUE"]
+                                      ) * self.config_dict["Plot"]["Coefficients"][self.df.loc[s_d]["TYPE"]]
                     if table_var == value:
                         top_res = s_d
                 except ValueError:
@@ -241,7 +349,7 @@ class MainWindow(QtW.QWidget):
         for elem in self.table.selectedItems():
             rows_pull.add(elem.row())
         for row in rows_pull:
-            sub_section = self.data_keeper[row]
+            sub_section = self.df.loc[row]
             date = sub_section["DATE"]
             heading = sub_section["TYPE"]
             points = self.scatter_plots[heading].scatter.points()

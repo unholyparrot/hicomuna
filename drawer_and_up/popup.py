@@ -3,13 +3,13 @@ from datetime import datetime, timedelta
 import PyQt5.QtWidgets as QtW
 import PyQt5.QtCore as QtC
 import numpy as np
+import pandas as pd
 
 
 class DateEdit(QtW.QDateEdit):
     def __init__(self, parent=None):
         # noinspection PyArgumentList
         super(DateEdit, self).__init__(parent, calendarPopup=True)
-        self.setDate(QtC.QDate.currentDate())
         self._today_button = QtW.QPushButton(self.tr("Today"))
         self._today_button.clicked.connect(self._update_today)
         self.calendarWidget().layout().addWidget(self._today_button)
@@ -49,11 +49,11 @@ def check_abstract_enoxa(value):
     else:
         try:
             temp_var = re.sub(",", ".", value)
-            temp_var = float(temp_var) * 10000
-            if (temp_var < 0) or (temp_var > 30000):
+            temp_var = float(temp_var)
+            if (temp_var < 0) or (temp_var > 3):
                 var_name = False
             else:
-                var_name = int(temp_var)
+                var_name = temp_var
         except ValueError:
             var_name = False
     return var_name
@@ -71,12 +71,22 @@ def check_abstract_infusion(value):
 
 
 class InputDialog(QtW.QDialog):
-    def __init__(self, q_dict):
+    def __init__(self, q_dict, date=None):
         super(InputDialog, self).__init__()
         self.q_dict = q_dict
         self.setModal(True)
 
         self.date_edit = DateEdit()
+        if date:
+            parsed = date.split(" ")[0]
+            if "/" in parsed:
+                pattern = "dd/MM/yyyy"
+            else:
+                pattern = "yyyy-MM-dd"
+            date_to_set = QtC.QDate.fromString(parsed, pattern)
+        else:
+            date_to_set = QtC.QDate.currentDate()
+        self.date_edit.setDate(date_to_set)
 
         self.time_edit = QtW.QTimeEdit()
         self.time_edit.setTime(QtC.QTime.currentTime())
@@ -236,10 +246,10 @@ class InputDialog(QtW.QDialog):
                     sub_errors.append(current_type_value)
             else:
                 sub_res.append((date + time, current_type_value, event_value, comment))
-
-        to_ret = np.array(sub_res,
-                          dtype=[('DATE', '<U24'), ('TYPE', '<U11'),
-                                 ('VALUE', '<U11'), ('COMMENT', '<U128')])
+        if len(sub_res) > 0:
+            to_ret = pd.DataFrame(np.array(sub_res, dtype=str), columns=["DATE", "TYPE", "VALUE", "COMMENT"])
+        else:
+            to_ret = None
         if len(sub_errors) > 0:
             errors_text = ""
             for heading in sub_errors:

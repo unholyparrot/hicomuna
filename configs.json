@@ -1,7 +1,9 @@
 {
+  "Version": "0.2.0",
   "Table": {
-    "Headings": ["DATE","TYPE","VALUE","COMMENT"]
-  },
+    "Headings": ["DATE","TYPE","VALUE","COMMENT"],
+    "Delimiter": ";"
+    },
   "Plot": {
     "AxisItems": {
       "bottomAxis": "DATE",
@@ -12,8 +14,8 @@
     "Coefficients": {
       "Vtop": 1,
       "Vtail":1,
-      "Enoxa": 1,
-      "RecEnoxa":1,
+      "Enoxa": 10000,
+      "RecEnoxa":10000,
       "Infusion": 12,
       "RecInfusion":12
     },
